@@ -1,12 +1,12 @@
 """
 Entry point project Customer Churn Prediction.
 
-File ini dibuat sederhana agar proses eksekusi mudah dipahami:
-1. Download / salin dataset ke folder project.
-2. Jalankan data cleaning dan feature engineering.
-3. Latih beberapa model klasifikasi.
-4. Evaluasi performa model.
-5. Simpan artefak untuk analisis lanjutan dan Power BI.
+This file is intentionally simple so the execution flow is easy to understand:
+1. Download or copy the dataset into the project folder.
+2. Run data cleaning and feature engineering.
+3. Train multiple classification models.
+4. Evaluate model performance.
+5. Save artifacts for follow-up analysis and Power BI.
 """
 
 from src.churn_pipeline import run_project_pipeline

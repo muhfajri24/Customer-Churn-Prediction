@@ -1,10 +1,8 @@
 """
-Pipeline utama untuk project Customer Churn Prediction.
+Main pipeline for the Customer Churn Prediction project.
 
-Struktur fungsi di file ini sengaja dipisah per tahap analisis agar:
-- mudah dibaca,
-- mudah di-debug,
-- dan mudah dijelaskan saat project dipresentasikan atau dites.
+The functions in this file are intentionally separated by analysis stage so the
+workflow is easier to read, debug, and explain during demos or interviews.
 """
 
 from __future__ import annotations
@@ -44,8 +42,8 @@ from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 
 
-# Root folder project dihitung relatif terhadap file ini,
-# sehingga script tetap jalan meskipun dieksekusi dari lokasi berbeda.
+# Resolve the project root relative to this file so the pipeline still works
+# even when it is executed from a different working directory.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"
@@ -59,10 +57,10 @@ POWERBI_DIR = PROJECT_ROOT / "powerbi"
 @dataclass
 class TrainedModelResult:
     """
-    Menyimpan hasil training tiap model dalam satu objek ringkas.
+    Store the training result for one model in a compact object.
 
-    Ini membantu kita menghindari banyak variabel terpisah
-    yang biasanya membuat kode cepat berantakan.
+    This avoids scattering model outputs across many separate variables, which
+    tends to make analytical code harder to maintain.
     """
 
     name: str
@@ -73,37 +71,35 @@ class TrainedModelResult:
 
 
 def ensure_directories() -> None:
-    """Membuat folder output project jika belum ada."""
+    """Create the project output folders if they do not already exist."""
     for folder in [RAW_DIR, PROCESSED_DIR, MODEL_DIR, FIGURE_DIR, POWERBI_DIR]:
         folder.mkdir(parents=True, exist_ok=True)
 
 
 def download_dataset() -> Path:
     """
-    Download dataset dari Kaggle melalui kagglehub, lalu salin ke folder project.
+    Download the dataset with KaggleHub and copy it into the project folder.
 
-    Kenapa disalin ke folder project?
-    Supaya semua artefak project ada dalam satu tempat dan mudah dites.
+    Keeping the CSV inside the repository structure makes the project easier to
+    test and keeps all artifacts in one place.
 
-    Urutan pengecekan dibuat seperti ini:
-    1. gunakan file lokal di folder project bila sudah ada,
-    2. gunakan cache Kaggle lokal bila tersedia,
-    3. baru lakukan download online.
+    The lookup order is:
+    1. use the local project file if it already exists,
+    2. use the local Kaggle cache if available,
+    3. fall back to an online download.
 
-    Dengan pendekatan ini, project tetap bisa dijalankan ulang
-    meskipun koneksi internet sedang tidak tersedia.
+    This makes reruns more reliable even when internet access is not available.
     """
     target_csv = RAW_DIR / "telco_customer_churn.csv"
 
-    # Bila dataset sudah pernah disalin ke folder project,
-    # kita langsung pakai file tersebut agar tidak perlu download ulang.
+    # Reuse the local project copy when it already exists to avoid repeated downloads.
     if target_csv.exists():
         return target_csv
 
     cache_root = Path.home() / ".cache" / "kagglehub" / "datasets" / "blastchar" / "telco-customer-churn"
     cache_candidates = sorted(cache_root.glob("versions/*/*.csv"))
 
-    # Bila file sudah ada di cache lokal Kaggle, cukup salin ke folder project.
+    # Reuse the local Kaggle cache when it is available.
     if cache_candidates:
         shutil.copy2(cache_candidates[-1], target_csv)
         return target_csv
@@ -115,62 +111,62 @@ def download_dataset() -> Path:
 
 
 def load_dataset(csv_path: Path) -> pd.DataFrame:
-    """Membaca dataset mentah dari file CSV."""
+    """Load the raw dataset from a CSV file."""
     return pd.read_csv(csv_path)
 
 
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Membersihkan data agar siap untuk proses modeling.
+    Clean the dataset so it is ready for modeling.
 
-    Langkah-langkah cleaning:
-    - hapus spasi yang tidak perlu,
-    - ubah tipe data,
-    - hapus duplikasi,
-    - tangani nilai kosong.
+    Cleaning steps:
+    - remove unnecessary whitespace,
+    - convert data types,
+    - drop duplicates,
+    - handle missing values.
     """
     cleaned = df.copy()
 
-    # `TotalCharges` pada dataset ini sering terbaca sebagai object
-    # karena ada nilai kosong berbentuk string spasi.
+    # `TotalCharges` is often read as an object column because blank strings
+    # appear in the source file.
     cleaned["TotalCharges"] = pd.to_numeric(cleaned["TotalCharges"], errors="coerce")
 
-    # Hapus spasi pada kolom kategorikal bila ada.
+    # Trim whitespace from categorical columns when present.
     for column in cleaned.select_dtypes(include="object").columns:
         cleaned[column] = cleaned[column].astype(str).str.strip()
 
-    # Ganti string kosong menjadi NA agar mudah diimpute.
+    # Convert empty strings into NA values for simpler downstream handling.
     cleaned = cleaned.replace({"": pd.NA, "nan": pd.NA})
 
-    # Hilangkan baris duplikat jika ada.
+    # Remove duplicates if they exist.
     cleaned = cleaned.drop_duplicates()
 
-    # Beberapa ID tetap berguna untuk pelacakan pelanggan,
-    # jadi tidak dihapus dari dataset utama. Nanti akan dikeluarkan dari fitur model.
+    # Keep customer IDs in the main table for traceability. They are excluded
+    # from model features later in the pipeline.
     return cleaned
 
 
 def add_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Menambahkan fitur turunan yang relevan secara bisnis.
+    Add business-relevant derived features.
 
-    Feature engineering dibuat sederhana namun bermakna,
-    agar mudah dijelaskan saat presentasi project.
+    The feature engineering stays intentionally simple so the project is easy
+    to explain during presentations.
     """
     featured = df.copy()
 
-    # Segmentasi masa berlangganan membantu membaca pola retensi pelanggan.
+    # Subscription-length segmentation makes retention patterns easier to read.
     featured["TenureGroup"] = pd.cut(
         featured["tenure"],
         bins=[-1, 12, 24, 48, 72],
         labels=["0-12 Months", "13-24 Months", "25-48 Months", "49-72 Months"],
     )
 
-    # Rasio biaya total terhadap lama langganan bisa membantu
-    # menggambarkan rata-rata nilai tagihan sepanjang hubungan pelanggan.
+    # The ratio of total charges to tenure approximates average spend across the
+    # customer relationship.
     featured["AvgMonthlySpend"] = featured["TotalCharges"] / featured["tenure"].replace(0, 1)
 
-    # Flag sederhana untuk pelanggan dengan proteksi layanan yang relatif rendah.
+    # A simple proxy for customers with relatively low support-service adoption.
     protection_columns = [
         "OnlineSecurity",
         "OnlineBackup",
@@ -179,14 +175,14 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     ]
     featured["SupportServiceCount"] = featured[protection_columns].eq("Yes").sum(axis=1)
 
-    # Target diubah ke 0/1 agar model klasifikasi lebih mudah dilatih.
+    # Convert the target to 0/1 so the classifiers can be trained directly.
     featured["ChurnFlag"] = featured["Churn"].map({"No": 0, "Yes": 1})
 
     return featured
 
 
 def save_cleaned_dataset(df: pd.DataFrame) -> None:
-    """Menyimpan dataset hasil cleaning dan feature engineering."""
+    """Save the cleaned and feature-engineered dataset."""
     df.to_csv(PROCESSED_DIR / "customer_churn_cleaned.csv", index=False)
 
 
@@ -194,10 +190,10 @@ def prepare_train_test_data(
     df: pd.DataFrame,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, List[str], List[str], pd.DataFrame]:
     """
-    Memisahkan fitur, target, dan customer ID.
+    Separate features, target, and customer ID.
 
-    `customerID` disimpan terpisah agar prediksi akhir bisa dikaitkan kembali
-    ke pelanggan aslinya untuk dashboard dan rekomendasi bisnis.
+    `customerID` is kept separately so final predictions can be linked back to
+    real customers for dashboards and business recommendations.
     """
     feature_df = df.copy()
     customer_reference = feature_df[["customerID", "Churn"]].copy()
@@ -224,15 +220,15 @@ def build_preprocessor(
     categorical_features: List[str],
 ) -> ColumnTransformer:
     """
-    Membangun preprocessing terpadu.
+    Build a unified preprocessing pipeline.
 
-    Numeric:
-    - imputasi median,
-    - scaling.
+    Numeric features:
+    - median imputation
+    - scaling
 
-    Categorical:
-    - imputasi modus,
-    - one hot encoding.
+    Categorical features:
+    - most-frequent imputation
+    - one-hot encoding
     """
     numeric_transformer = Pipeline(
         steps=[
@@ -258,10 +254,10 @@ def build_preprocessor(
 
 def build_models(preprocessor: ColumnTransformer) -> Dict[str, Pipeline]:
     """
-    Menyiapkan tiga model sesuai permintaan project.
+    Build the three models used in this project.
 
-    Semua model dibungkus dalam pipeline yang sama
-    agar preprocessing konsisten.
+    All models are wrapped in the same pipeline so preprocessing stays
+    consistent across experiments.
     """
     return {
         "logistic_regression": Pipeline(
@@ -316,14 +312,14 @@ def build_models(preprocessor: ColumnTransformer) -> Dict[str, Pipeline]:
 
 def evaluate_model(name: str, pipeline: Pipeline, X_test: pd.DataFrame, y_test: pd.Series) -> TrainedModelResult:
     """
-    Menghasilkan prediksi dan metrik evaluasi untuk satu model.
+    Generate predictions and evaluation metrics for one model.
 
-    Metrik utama:
-    - accuracy,
-    - precision,
-    - recall,
-    - F1-score,
-    - ROC-AUC.
+    Main metrics:
+    - accuracy
+    - precision
+    - recall
+    - F1-score
+    - ROC-AUC
     """
     y_pred = pd.Series(pipeline.predict(X_test), index=y_test.index, name="prediction")
     y_proba = pd.Series(pipeline.predict_proba(X_test)[:, 1], index=y_test.index, name="churn_probability")
@@ -352,7 +348,7 @@ def train_and_evaluate_models(
     y_test: pd.Series,
     preprocessor: ColumnTransformer,
 ) -> List[TrainedModelResult]:
-    """Melatih seluruh model dan mengembalikan hasil evaluasinya."""
+    """Train every model and return their evaluation results."""
     models = build_models(preprocessor)
     results: List[TrainedModelResult] = []
 
@@ -364,7 +360,7 @@ def train_and_evaluate_models(
 
 
 def save_metrics(results: List[TrainedModelResult]) -> pd.DataFrame:
-    """Menyimpan ringkasan metrik seluruh model ke CSV."""
+    """Save the cross-model metrics summary to CSV."""
     metrics_df = pd.DataFrame(
         [{"model": result.name, **result.metrics} for result in results]
     ).sort_values(by="roc_auc", ascending=False)
@@ -374,7 +370,7 @@ def save_metrics(results: List[TrainedModelResult]) -> pd.DataFrame:
 
 
 def plot_class_distribution(df: pd.DataFrame) -> None:
-    """Menyimpan visual distribusi churn."""
+    """Save the churn class distribution chart."""
     plt.figure(figsize=(7, 5))
     sns.countplot(data=df, x="Churn", hue="Churn", palette="Set2", legend=False)
     plt.title("Customer Churn Distribution")
@@ -386,7 +382,7 @@ def plot_class_distribution(df: pd.DataFrame) -> None:
 
 
 def plot_roc_curves(results: List[TrainedModelResult], y_test: pd.Series) -> None:
-    """Membuat perbandingan ROC curve untuk semua model."""
+    """Create a ROC-curve comparison for all models."""
     plt.figure(figsize=(8, 6))
 
     for result in results:
@@ -404,7 +400,7 @@ def plot_roc_curves(results: List[TrainedModelResult], y_test: pd.Series) -> Non
 
 
 def plot_confusion_matrices(results: List[TrainedModelResult], y_test: pd.Series) -> None:
-    """Menyimpan confusion matrix untuk masing-masing model."""
+    """Save the confusion matrix for each model."""
     for result in results:
         matrix = confusion_matrix(y_test, result.y_pred)
         disp = ConfusionMatrixDisplay(confusion_matrix=matrix)
@@ -417,10 +413,10 @@ def plot_confusion_matrices(results: List[TrainedModelResult], y_test: pd.Series
 
 def extract_feature_names(preprocessor: ColumnTransformer) -> List[str]:
     """
-    Mengambil nama fitur hasil preprocessing.
+    Extract feature names from the preprocessing step.
 
-    Ini penting karena setelah one-hot encoding, nama kolom asli berubah
-    menjadi banyak fitur dummy.
+    This matters because one-hot encoding expands the original categorical
+    columns into many derived dummy features.
     """
     return preprocessor.get_feature_names_out().tolist()
 
@@ -431,9 +427,10 @@ def save_feature_importance(
     y_test: pd.Series,
 ) -> pd.DataFrame:
     """
-    Menghitung feature importance menggunakan permutation importance.
+    Calculate feature importance with permutation importance.
 
-    Pendekatan ini lebih universal karena bisa dipakai lintas model pipeline.
+    This is a model-agnostic approach, so it works across different pipeline
+    architectures.
     """
     importance = permutation_importance(
         best_result.pipeline,
@@ -458,7 +455,7 @@ def save_feature_importance(
 
 
 def save_model_artifacts(results: List[TrainedModelResult]) -> None:
-    """Menyimpan model yang telah dilatih agar bisa dipakai ulang."""
+    """Save the trained models for reuse."""
     for result in results:
         joblib.dump(result.pipeline, MODEL_DIR / f"{result.name}.joblib")
 
@@ -469,12 +466,12 @@ def save_prediction_outputs(
     y_test: pd.Series,
 ) -> pd.DataFrame:
     """
-    Menyimpan prediksi dari model terbaik.
+    Save predictions from the best-performing model.
 
-    File ini berguna untuk:
-    - validasi manual,
-    - analisis pelanggan berisiko tinggi,
-    - import ke Power BI.
+    This file is useful for:
+    - manual validation
+    - high-risk customer analysis
+    - Power BI import
     """
     prediction_df = X_test.copy()
     prediction_df["actual_churn_flag"] = y_test.values
@@ -493,9 +490,9 @@ def save_prediction_outputs(
 
 def build_powerbi_summary(df: pd.DataFrame) -> None:
     """
-    Menyiapkan tabel ringkas untuk dashboard Power BI.
+    Build summary tables for the Power BI dashboard.
 
-    Tabel ini dibuat agar pembuatan visual lebih cepat.
+    These pre-aggregated tables make dashboard creation faster.
     """
     summary_contract = (
         df.groupby("Contract", observed=False)
@@ -537,7 +534,7 @@ def build_powerbi_summary(df: pd.DataFrame) -> None:
 
 
 def save_classification_reports(results: List[TrainedModelResult], y_test: pd.Series) -> None:
-    """Menyimpan classification report tiap model dalam format JSON yang mudah dibaca ulang."""
+    """Save each model's classification report as reusable JSON."""
     for result in results:
         report = classification_report(y_test, result.y_pred, output_dict=True)
         with open(REPORT_DIR / f"classification_report_{result.name}.json", "w", encoding="utf-8") as file:
@@ -550,10 +547,10 @@ def save_business_recommendations(
     cleaned_df: pd.DataFrame,
 ) -> None:
     """
-    Menyimpan rekomendasi bisnis berbasis hasil model dan pola data.
+    Save business recommendations based on model output and data patterns.
 
-    Tujuannya agar project tidak berhenti di modeling,
-    tetapi lanjut ke insight yang bisa dipakai bisnis.
+    The goal is to extend the project beyond modeling into business-ready
+    insights.
     """
     top_contract = cleaned_df.groupby("Contract", observed=False)["ChurnFlag"].mean().sort_values(ascending=False)
     top_payment = cleaned_df.groupby("PaymentMethod", observed=False)["ChurnFlag"].mean().sort_values(ascending=False)
@@ -563,14 +560,14 @@ def save_business_recommendations(
     top_features = importance_df.head(5)["feature"].tolist()
 
     recommendations = [
-        f"Model terbaik berdasarkan ROC-AUC adalah {best_model_name}.",
-        f"Kontrak dengan churn rate tertinggi adalah {top_contract.index[0]} ({top_contract.iloc[0]:.2%}).",
-        f"Metode pembayaran dengan churn rate tertinggi adalah {top_payment.index[0]} ({top_payment.iloc[0]:.2%}).",
-        f"Layanan internet dengan churn rate tertinggi adalah {top_internet.index[0]} ({top_internet.iloc[0]:.2%}).",
-        f"Fitur yang paling berpengaruh terhadap churn dari model terbaik: {', '.join(top_features)}.",
-        "Prioritaskan program retensi untuk pelanggan month-to-month dengan probabilitas churn tinggi.",
-        "Buat penawaran bundling atau loyalty benefit untuk pelanggan dengan layanan support rendah.",
-        "Evaluasi friction pada pembayaran electronic check karena segmen ini sering menunjukkan churn lebih tinggi.",
+        f"The best model by ROC-AUC is {best_model_name}.",
+        f"The contract type with the highest churn rate is {top_contract.index[0]} ({top_contract.iloc[0]:.2%}).",
+        f"The payment method with the highest churn rate is {top_payment.index[0]} ({top_payment.iloc[0]:.2%}).",
+        f"The internet service with the highest churn rate is {top_internet.index[0]} ({top_internet.iloc[0]:.2%}).",
+        f"The most influential churn drivers in the best model are: {', '.join(top_features)}.",
+        "Prioritize retention programs for month-to-month customers with high predicted churn probability.",
+        "Create bundling offers or loyalty benefits for customers with relatively low support-service adoption.",
+        "Review potential friction in electronic check payments because this segment shows consistently higher churn.",
     ]
 
     with open(REPORT_DIR / "business_recommendations.txt", "w", encoding="utf-8") as file:
@@ -579,9 +576,9 @@ def save_business_recommendations(
 
 def run_project_pipeline() -> None:
     """
-    Fungsi utama yang mengeksekusi seluruh alur project dari awal sampai akhir.
+    Execute the full project workflow from start to finish.
 
-    Urutan ini dibuat linear agar gampang diikuti oleh pembaca baru.
+    The sequence is intentionally linear so new readers can follow it easily.
     """
     ensure_directories()
 
@@ -608,7 +605,7 @@ def run_project_pipeline() -> None:
     build_powerbi_summary(featured_df)
     save_business_recommendations(metrics_df, importance_df, featured_df)
 
-    print("Project pipeline selesai dijalankan.")
+    print("Project pipeline completed successfully.")
     print(f"Best model: {best_result.name}")
     print("Metrics summary:")
     print(metrics_df.to_string(index=False))
