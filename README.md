@@ -2,6 +2,13 @@
 
 This project aims to predict customers who are likely to stop using the service (churn), and then translate the model results into business insights that can support customer retention strategies.
 
+## Repository Summary
+
+- End-to-end churn prediction workflow for a telecom customer dataset
+- Three classification models: Logistic Regression, Random Forest, and XGBoost
+- Evaluation outputs, saved models, business recommendations, and Power BI-ready files
+- Notebook-style walkthrough for step-by-step visuals similar to Google Colab
+
 ## Project Objectives
 
 - Perform data cleaning on the Telco Customer Churn dataset.
@@ -156,6 +163,26 @@ See also:
 
 - `powerbi/README.md`
 
+## Current Best Result
+
+Based on the latest run saved in `reports/metrics_summary.csv`, the best model is currently:
+
+- `Logistic Regression` by `ROC-AUC`
+
+Latest comparison:
+
+| Model | Accuracy | Precision | Recall | F1-Score | ROC-AUC |
+|---|---:|---:|---:|---:|---:|
+| Logistic Regression | 0.7622 | 0.5371 | 0.7540 | 0.6274 | 0.8415 |
+| XGBoost | 0.7991 | 0.6532 | 0.5187 | 0.5782 | 0.8408 |
+| Random Forest | 0.7147 | 0.4778 | 0.8048 | 0.5996 | 0.8221 |
+
+Why Logistic Regression is selected as the best model:
+
+- It has the highest `ROC-AUC`, which is the primary selection metric in this project.
+- It also has the strongest `F1-Score`, giving the best balance between precision and recall.
+- `XGBoost` has higher accuracy, and `Random Forest` has higher recall, but neither beats Logistic Regression on overall ranking performance.
+
 ## How to Run the Project
 
 ### 1. Go to the project folder
@@ -175,6 +202,14 @@ pip install -r requirements.txt
 ```powershell
 python run_pipeline.py
 ```
+
+### 4. Run the notebook-style walkthrough
+
+```powershell
+python notebooks/customer_churn_walkthrough.py
+```
+
+For the intended notebook experience, open the file in VS Code and run it cell by cell with the Jupyter extension.
 
 ## Google Colab-like Display Mode
 
