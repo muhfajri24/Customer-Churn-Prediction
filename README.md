@@ -230,9 +230,9 @@ The `.py` file uses the `# %%` format, so it can be executed like a notebook in 
 ### How to use it in Google Colab
 
 1. Upload `notebooks/customer_churn_walkthrough.ipynb`
-2. Upload or mount the project folder so `src/` is available
-3. Adjust the `PROJECT_ROOT` cell if needed
-4. Run the notebook from top to bottom
+2. Run the notebook from top to bottom
+3. If `src/` is not available in the runtime, the notebook will automatically clone this repository and install its requirements
+4. If you prefer using Google Drive instead, you can still mount Drive and point `PROJECT_ROOT` to your own copy of the project
 
 ### What will be displayed in this mode
 
