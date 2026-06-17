@@ -1,18 +1,18 @@
 # %%
 """
-Notebook-style walkthrough untuk Customer Churn Prediction.
+Notebook-style walkthrough for the Customer Churn Prediction project.
 
-File ini dibuat dengan format `# %%` agar bisa dijalankan seperti Google Colab
-di VS Code:
-- per cell,
-- hasil tabel langsung tampil,
-- grafik tampil inline,
-- dan alur analisis bisa diikuti dari awal sampai akhir.
+This file uses the `# %%` format so it can be executed like Google Colab
+inside VS Code:
+- one cell at a time,
+- tables displayed inline,
+- charts displayed inline,
+- and the full analysis can be followed from start to finish.
 
-Cara pakai di VS Code:
-1. Buka file ini.
-2. Klik "Run Cell" pada setiap blok `# %%`.
-3. Jika diminta, pilih environment Python yang sama dengan project ini.
+How to use it in VS Code:
+1. Open this file.
+2. Click "Run Cell" on each `# %%` block.
+3. If prompted, select the same Python environment used for this project.
 """
 
 from pathlib import Path
@@ -26,7 +26,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.metrics import ConfusionMatrixDisplay, roc_curve
 
 
-# Menambahkan root project ke path Python agar import dari folder `src` berjalan.
+# Add the project root to the Python path so imports from `src` work correctly.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
@@ -56,7 +56,7 @@ pd.set_option("display.width", 160)
 
 
 def show_section(title: str, subtitle: str = "") -> None:
-    """Menampilkan judul bagian agar notebook lebih enak dibaca."""
+    """Display a section heading to make the notebook easier to follow."""
     text = f"## {title}"
     if subtitle:
         text += f"\n\n{subtitle}"
@@ -64,7 +64,7 @@ def show_section(title: str, subtitle: str = "") -> None:
 
 
 def show_missing_value_chart(df: pd.DataFrame, title: str) -> None:
-    """Menampilkan bar chart missing value per kolom."""
+    """Display a bar chart of missing values by column."""
     missing_df = (
         df.isna()
         .sum()
@@ -76,7 +76,7 @@ def show_missing_value_chart(df: pd.DataFrame, title: str) -> None:
     )
 
     if missing_df.empty:
-        print("Tidak ada missing value yang terdeteksi.")
+        print("No missing values were detected.")
         return
 
     plt.figure(figsize=(10, 5))
@@ -90,7 +90,7 @@ def show_missing_value_chart(df: pd.DataFrame, title: str) -> None:
 
 
 def show_numeric_distribution(df: pd.DataFrame, columns: list[str], title_prefix: str) -> None:
-    """Menampilkan histogram untuk beberapa fitur numerik utama."""
+    """Display histograms for selected numeric features."""
     fig, axes = plt.subplots(1, len(columns), figsize=(5 * len(columns), 4))
     if len(columns) == 1:
         axes = [axes]
@@ -106,7 +106,7 @@ def show_numeric_distribution(df: pd.DataFrame, columns: list[str], title_prefix
 
 
 def show_churn_comparison(df: pd.DataFrame, category_column: str, title: str) -> None:
-    """Menampilkan churn rate berdasarkan satu kolom kategorikal."""
+    """Display churn rate for a categorical feature."""
     summary = (
         df.groupby(category_column, observed=False)["ChurnFlag"]
         .mean()
@@ -130,7 +130,7 @@ def show_churn_comparison(df: pd.DataFrame, category_column: str, title: str) ->
 
 
 def summarize_preprocessor(preprocessor: ColumnTransformer, X_train: pd.DataFrame) -> None:
-    """Menampilkan ringkasan hasil preprocessing."""
+    """Display a quick preview of the transformed feature matrix."""
     transformed = preprocessor.fit_transform(X_train)
     feature_names = preprocessor.get_feature_names_out()
 
@@ -139,24 +139,24 @@ def summarize_preprocessor(preprocessor: ColumnTransformer, X_train: pd.DataFram
         columns=feature_names[:10],
     )
 
-    print("Bentuk data setelah preprocessing:", transformed.shape)
-    print("Contoh 10 fitur hasil transformasi:")
+    print("Shape after preprocessing:", transformed.shape)
+    print("Preview of the first 10 transformed features:")
     display(preview_df.round(3))
 
 
 # %%
-show_section("1. Persiapan Dataset", "Load dataset dan tampilkan preview awal.")
+show_section("1. Dataset Preparation", "Load the dataset and display the initial preview.")
 ensure_directories()
 csv_path = download_dataset()
 raw_df = load_dataset(csv_path)
 
-print("Path dataset:", csv_path)
-print("Ukuran data mentah:", raw_df.shape)
+print("Dataset path:", csv_path)
+print("Raw dataset shape:", raw_df.shape)
 display(raw_df.head())
 
 
 # %%
-show_section("2. Overview Dataset", "Lihat tipe data, jumlah kolom, dan sampel isi dataset.")
+show_section("2. Dataset Overview", "Inspect data types, column counts, and basic dataset structure.")
 dataset_overview = pd.DataFrame(
     {
         "column": raw_df.columns,
@@ -170,46 +170,46 @@ raw_df.info()
 
 
 # %%
-show_section("3. Missing Value dan Duplikasi", "Tahap ini membantu kita melihat masalah data sebelum cleaning.")
+show_section("3. Missing Values and Duplicates", "Identify data quality issues before cleaning.")
 missing_before = raw_df.isna().sum().sort_values(ascending=False)
 duplicate_before = raw_df.duplicated().sum()
 
-print("Jumlah duplikasi sebelum cleaning:", duplicate_before)
+print("Duplicate rows before cleaning:", duplicate_before)
 display(missing_before[missing_before > 0].to_frame(name="missing_count"))
-show_missing_value_chart(raw_df, "Missing Value Sebelum Cleaning")
+show_missing_value_chart(raw_df, "Missing Values Before Cleaning")
 
 
 # %%
-show_section("4. Distribusi Fitur Numerik Awal", "Melihat sebaran fitur numerik penting sebelum cleaning.")
+show_section("4. Initial Numeric Feature Distributions", "Review the distribution of key numeric features before cleaning.")
 raw_numeric = raw_df.copy()
 raw_numeric["TotalCharges"] = pd.to_numeric(raw_numeric["TotalCharges"], errors="coerce")
-show_numeric_distribution(raw_numeric, ["tenure", "MonthlyCharges", "TotalCharges"], "Distribusi Awal")
+show_numeric_distribution(raw_numeric, ["tenure", "MonthlyCharges", "TotalCharges"], "Initial Distribution")
 
 
 # %%
-show_section("5. Data Cleaning", "Jalankan fungsi cleaning lalu tampilkan hasilnya.")
+show_section("5. Data Cleaning", "Run the cleaning function and display the result.")
 cleaned_df = clean_data(raw_df)
 
-print("Ukuran data sebelum cleaning :", raw_df.shape)
-print("Ukuran data setelah cleaning:", cleaned_df.shape)
+print("Shape before cleaning :", raw_df.shape)
+print("Shape after cleaning  :", cleaned_df.shape)
 display(cleaned_df.head())
 
 
 # %%
-show_section("6. Perbandingan Sebelum dan Sesudah Cleaning", "Cek missing value dan statistik numerik setelah cleaning.")
+show_section("6. Before vs After Cleaning", "Re-check missing values and numeric summaries after cleaning.")
 missing_after = cleaned_df.isna().sum().sort_values(ascending=False)
 display(missing_after[missing_after > 0].to_frame(name="missing_count"))
-show_missing_value_chart(cleaned_df, "Missing Value Setelah Cleaning")
+show_missing_value_chart(cleaned_df, "Missing Values After Cleaning")
 display(cleaned_df[["tenure", "MonthlyCharges", "TotalCharges"]].describe().round(2))
 
 
 # %%
-show_section("7. Visual Target Churn", "Lihat proporsi customer churn dan non-churn.")
+show_section("7. Target Distribution", "Visualize churn vs non-churn customers.")
 plt.figure(figsize=(7, 5))
 sns.countplot(data=cleaned_df, x="Churn", hue="Churn", palette="Set2", legend=False)
-plt.title("Distribusi Customer Churn")
+plt.title("Customer Churn Distribution")
 plt.xlabel("Churn")
-plt.ylabel("Jumlah Customer")
+plt.ylabel("Number of Customers")
 plt.tight_layout()
 plt.show()
 
@@ -218,7 +218,7 @@ display(churn_ratio.to_frame(name="percentage"))
 
 
 # %%
-show_section("8. EDA Numerik terhadap Churn", "Bandingkan distribusi tenure dan biaya pada customer churn vs non-churn.")
+show_section("8. Numeric EDA by Churn", "Compare tenure and monthly charges across churn classes.")
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 sns.boxplot(data=cleaned_df, x="Churn", y="tenure", hue="Churn", ax=axes[0], legend=False, palette="Set2")
 axes[0].set_title("Tenure vs Churn")
@@ -231,24 +231,24 @@ plt.show()
 
 
 # %%
-show_section("9. EDA Kategorikal", "Bandingkan churn rate untuk beberapa segmen bisnis utama.")
+show_section("9. Categorical EDA", "Compare churn rate across key business segments.")
 cleaned_with_flag = cleaned_df.copy()
 cleaned_with_flag["ChurnFlag"] = cleaned_with_flag["Churn"].map({"No": 0, "Yes": 1})
-show_churn_comparison(cleaned_with_flag, "Contract", "Churn Rate berdasarkan Contract")
-show_churn_comparison(cleaned_with_flag, "InternetService", "Churn Rate berdasarkan Internet Service")
-show_churn_comparison(cleaned_with_flag, "PaymentMethod", "Churn Rate berdasarkan Payment Method")
+show_churn_comparison(cleaned_with_flag, "Contract", "Churn Rate by Contract")
+show_churn_comparison(cleaned_with_flag, "InternetService", "Churn Rate by Internet Service")
+show_churn_comparison(cleaned_with_flag, "PaymentMethod", "Churn Rate by Payment Method")
 
 
 # %%
-show_section("10. Feature Engineering", "Tambahkan fitur turunan agar model punya informasi yang lebih kaya.")
+show_section("10. Feature Engineering", "Create additional features to enrich the model input.")
 featured_df = add_features(cleaned_df)
 
-print("Ukuran data setelah feature engineering:", featured_df.shape)
+print("Shape after feature engineering:", featured_df.shape)
 display(featured_df.head())
 
 
 # %%
-show_section("11. Fitur Baru yang Dihasilkan", "Preview kolom turunan yang dibuat pada tahap feature engineering.")
+show_section("11. Newly Created Features", "Preview the engineered columns added for modeling.")
 display(
     featured_df[
         [
@@ -265,21 +265,21 @@ display(
 
 
 # %%
-show_section("12. Visualisasi Fitur Baru", "Lihat bagaimana fitur baru terdistribusi.")
+show_section("12. Engineered Feature Visualizations", "Check how the engineered features are distributed.")
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 sns.countplot(data=featured_df, x="TenureGroup", hue="TenureGroup", ax=axes[0], palette="crest", legend=False)
-axes[0].set_title("Distribusi Tenure Group")
+axes[0].set_title("Tenure Group Distribution")
 axes[0].tick_params(axis="x", rotation=20)
 
 sns.countplot(data=featured_df, x="SupportServiceCount", hue="SupportServiceCount", ax=axes[1], palette="mako", legend=False)
-axes[1].set_title("Distribusi Support Service Count")
+axes[1].set_title("Support Service Count Distribution")
 
 plt.tight_layout()
 plt.show()
 
 
 # %%
-show_section("13. Korelasi Fitur Numerik", "Heatmap ini membantu melihat hubungan antar fitur numerik utama.")
+show_section("13. Numeric Correlation Heatmap", "Review relationships among the main numeric features.")
 numeric_corr = featured_df[["tenure", "MonthlyCharges", "TotalCharges", "AvgMonthlySpend", "SupportServiceCount", "ChurnFlag"]].corr()
 plt.figure(figsize=(8, 6))
 sns.heatmap(numeric_corr, annot=True, cmap="coolwarm", fmt=".2f")
@@ -289,7 +289,7 @@ plt.show()
 
 
 # %%
-show_section("14. Train-Test Split", "Pisahkan data train dan test lalu tampilkan komposisinya.")
+show_section("14. Train-Test Split", "Split the dataset and display the resulting shapes.")
 X_train, X_test, y_train, y_test, numeric_features, categorical_features, _ = prepare_train_test_data(featured_df)
 
 split_summary = pd.DataFrame(
@@ -311,26 +311,26 @@ display(target_distribution)
 
 
 # %%
-show_section("15. Preprocessing Setup", "Tampilkan fitur numerik, kategorikal, dan contoh hasil transformasi.")
-print("Jumlah fitur numerik   :", len(numeric_features))
-print("Jumlah fitur kategorikal:", len(categorical_features))
-print("Contoh fitur numerik   :", numeric_features[:5])
-print("Contoh fitur kategorikal:", categorical_features[:5])
+show_section("15. Preprocessing Setup", "Display numeric and categorical feature groups plus transformed output preview.")
+print("Number of numeric features    :", len(numeric_features))
+print("Number of categorical features:", len(categorical_features))
+print("Sample numeric features       :", numeric_features[:5])
+print("Sample categorical features   :", categorical_features[:5])
 
 preprocessor = build_preprocessor(numeric_features, categorical_features)
 summarize_preprocessor(preprocessor, X_train)
 
 
 # %%
-show_section("16. Model Setup", "Project ini melatih tiga model klasifikasi.")
+show_section("16. Model Setup", "This project trains three classification models.")
 models = build_models(preprocessor)
 model_summary = pd.DataFrame(
     {
         "model_name": list(models.keys()),
         "description": [
-            "Baseline linear model yang mudah dijelaskan",
-            "Model ensemble berbasis banyak decision tree",
-            "Boosting model yang kuat untuk data tabular",
+            "Baseline linear model that is easy to interpret",
+            "Ensemble model built from multiple decision trees",
+            "Boosting model that performs strongly on tabular data",
         ],
     }
 )
@@ -338,11 +338,11 @@ display(model_summary)
 
 
 # %%
-show_section("17. Training Model", "Latih model satu per satu dan tampilkan hasil metrik awalnya.")
+show_section("17. Model Training", "Train each model and display its immediate evaluation metrics.")
 results = []
 
 for model_name, model_pipeline in models.items():
-    print(f"Melatih model: {model_name}")
+    print(f"Training model: {model_name}")
     model_pipeline.fit(X_train, y_train)
     result = evaluate_model(model_name, model_pipeline, X_test, y_test)
     results.append(result)
@@ -350,17 +350,17 @@ for model_name, model_pipeline in models.items():
 
 
 # %%
-show_section("18. Ringkasan Metrik", "Bandingkan accuracy, precision, recall, F1-score, dan ROC-AUC.")
+show_section("18. Metrics Summary", "Compare accuracy, precision, recall, F1-score, and ROC-AUC.")
 metrics_df = save_metrics(results)
 display(metrics_df)
 
 
 # %%
-show_section("19. Visualisasi Perbandingan Model", "Grafik bar memudahkan membaca kekuatan masing-masing model.")
+show_section("19. Model Comparison Chart", "Use a grouped bar chart to compare model performance across all metrics.")
 metrics_long = metrics_df.melt(id_vars="model", var_name="metric", value_name="score")
 plt.figure(figsize=(11, 6))
 sns.barplot(data=metrics_long, x="metric", y="score", hue="model", palette="viridis")
-plt.title("Perbandingan Metrik Seluruh Model")
+plt.title("Model Metrics Comparison")
 plt.xlabel("Metric")
 plt.ylabel("Score")
 plt.ylim(0, 1)
@@ -370,7 +370,7 @@ plt.show()
 
 
 # %%
-show_section("20. ROC Curve", "Kurva ROC membantu membandingkan kemampuan model memisahkan kelas churn dan non-churn.")
+show_section("20. ROC Curve", "Compare how well the models separate churn and non-churn customers.")
 plt.figure(figsize=(8, 6))
 for result in results:
     fpr, tpr, _ = roc_curve(y_test, result.y_proba)
@@ -386,7 +386,7 @@ plt.show()
 
 
 # %%
-show_section("21. Confusion Matrix", "Confusion matrix menunjukkan salah dan benar prediksi tiap model.")
+show_section("21. Confusion Matrices", "Inspect the classification outcomes of each model.")
 for result in results:
     fig, axis = plt.subplots(figsize=(5, 4))
     ConfusionMatrixDisplay.from_predictions(y_test, result.y_pred, cmap="Blues", ax=axis, colorbar=False)
@@ -396,37 +396,37 @@ for result in results:
 
 
 # %%
-show_section("22. Menentukan Best Model", "Best model saat ini dipilih berdasarkan ROC-AUC tertinggi.")
+show_section("22. Best Model Selection", "The current best model is selected using the highest ROC-AUC.")
 best_result = sorted(results, key=lambda item: item.metrics["roc_auc"], reverse=True)[0]
-print("Model terbaik berdasarkan ROC-AUC:", best_result.name)
+print("Best model based on ROC-AUC:", best_result.name)
 display(pd.DataFrame([best_result.metrics], index=[best_result.name]))
 
 
 # %%
-show_section("23. Prediksi dan Scoring", "Simpan model lalu tampilkan hasil scoring customer pada data test.")
+show_section("23. Prediction and Scoring", "Save the trained models and preview customer scoring results.")
 save_model_artifacts(results)
 prediction_df = save_prediction_outputs(best_result, X_test, y_test)
 display(prediction_df.head(10))
 
 
 # %%
-show_section("24. Distribusi Probabilitas dan Risk Segment", "Visual ini membantu membaca hasil scoring churn secara bisnis.")
+show_section("24. Probability and Risk Segment Distribution", "Visualize churn probabilities and business risk segments.")
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 sns.histplot(prediction_df["churn_probability"], bins=20, kde=True, ax=axes[0], color="#d62728")
-axes[0].set_title("Distribusi Churn Probability")
+axes[0].set_title("Churn Probability Distribution")
 axes[0].set_xlabel("Churn Probability")
 
 sns.countplot(data=prediction_df, x="risk_segment", hue="risk_segment", ax=axes[1], palette="coolwarm", legend=False)
-axes[1].set_title("Distribusi Risk Segment")
+axes[1].set_title("Risk Segment Distribution")
 axes[1].set_xlabel("Risk Segment")
-axes[1].set_ylabel("Jumlah Customer")
+axes[1].set_ylabel("Number of Customers")
 
 plt.tight_layout()
 plt.show()
 
 
 # %%
-show_section("25. Customer Risiko Tertinggi", "Tabel ini cocok untuk bahan rekomendasi retensi.")
+show_section("25. Highest-Risk Customers", "Use this table to identify customers who should be prioritized for retention.")
 high_risk_customers = prediction_df.sort_values("churn_probability", ascending=False).head(20)
 display(
     high_risk_customers[
@@ -445,13 +445,13 @@ display(
 
 
 # %%
-show_section("26. Feature Importance", "Cari fitur yang paling memengaruhi prediksi churn.")
+show_section("26. Feature Importance", "Identify which features matter most for churn prediction.")
 importance_df = save_feature_importance(best_result, X_test, y_test)
 display(importance_df.head(10))
 
 
 # %%
-show_section("27. Visualisasi Feature Importance", "Top 10 feature importance dari model terbaik.")
+show_section("27. Feature Importance Chart", "Display the top 10 most influential features from the best model.")
 top_importance = importance_df.head(10).sort_values("importance_mean", ascending=True)
 
 plt.figure(figsize=(9, 6))
@@ -464,7 +464,7 @@ plt.show()
 
 
 # %%
-show_section("28. Output untuk Power BI", "Siapkan file summary agar dashboard bisa langsung dibuat.")
+show_section("28. Power BI Output", "Prepare the summary files used to build the dashboard.")
 build_powerbi_summary(featured_df)
 powerbi_files = pd.DataFrame(
     {
@@ -475,10 +475,10 @@ powerbi_files = pd.DataFrame(
             "summary_by_internet_service.csv",
         ],
         "purpose": [
-            "Hasil scoring customer test set",
-            "Ringkasan churn per kontrak",
-            "Ringkasan churn per metode pembayaran",
-            "Ringkasan churn per layanan internet",
+            "Customer-level test set scoring output",
+            "Contract-level churn summary",
+            "Payment-method churn summary",
+            "Internet-service churn summary",
         ],
     }
 )
@@ -486,14 +486,14 @@ display(powerbi_files)
 
 
 # %%
-show_section("29. Rekomendasi Bisnis", "Hasil modeling diterjemahkan menjadi rekomendasi yang bisa dipakai tim bisnis.")
+show_section("29. Business Recommendations", "Translate model outputs into actionable business suggestions.")
 save_business_recommendations(metrics_df, importance_df, featured_df)
 recommendation_file = PROJECT_ROOT / "reports" / "business_recommendations.txt"
 print(recommendation_file.read_text(encoding="utf-8"))
 
 
 # %%
-show_section("30. Kesimpulan", "Tahap akhir: tampilkan ringkasan model dan simpulkan hasil analisis.")
-print("Analisis selesai.")
-print("Model terbaik berdasarkan ROC-AUC:", best_result.name)
+show_section("30. Final Summary", "Close the walkthrough by showing the final model comparison.")
+print("Analysis completed.")
+print("Best model based on ROC-AUC:", best_result.name)
 display(metrics_df)
