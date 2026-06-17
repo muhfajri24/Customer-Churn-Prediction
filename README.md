@@ -216,8 +216,9 @@ For the intended notebook experience, open the file in VS Code and run it cell b
 If you want to see the process from beginning to end while displaying tables and charts step by step, use:
 
 - `notebooks/customer_churn_walkthrough.py`
+- `notebooks/customer_churn_walkthrough.ipynb`
 
-This file uses the `# %%` format, so it can be executed like a notebook in VS Code.
+The `.py` file uses the `# %%` format, so it can be executed like a notebook in VS Code. The `.ipynb` file is included for direct upload to Google Colab.
 
 ### How to run the notebook-style mode in VS Code
 
@@ -225,6 +226,13 @@ This file uses the `# %%` format, so it can be executed like a notebook in VS Co
 2. Make sure the Python and Jupyter extensions are enabled in VS Code
 3. Click `Run Cell` on each block
 4. Tables, cleaning results, and charts will be displayed inline similar to Google Colab
+
+### How to use it in Google Colab
+
+1. Upload `notebooks/customer_churn_walkthrough.ipynb`
+2. Upload or mount the project folder so `src/` is available
+3. Adjust the `PROJECT_ROOT` cell if needed
+4. Run the notebook from top to bottom
 
 ### What will be displayed in this mode
 
