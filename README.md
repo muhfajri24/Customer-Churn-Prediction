@@ -188,7 +188,7 @@ Why Logistic Regression is selected as the best model:
 ### 1. Go to the project folder
 
 ```powershell
-cd "d:\code\project portfolio\Customer Churn Prediction"
+cd Customer-Churn-Prediction
 ```
 
 ### 2. Install dependencies
