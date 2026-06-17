@@ -1,0 +1,8 @@
+Model terbaik berdasarkan ROC-AUC adalah logistic_regression.
+Kontrak dengan churn rate tertinggi adalah Month-to-month (42.71%).
+Metode pembayaran dengan churn rate tertinggi adalah Electronic check (45.29%).
+Layanan internet dengan churn rate tertinggi adalah Fiber optic (41.89%).
+Fitur yang paling berpengaruh terhadap churn dari model terbaik: tenure, Contract, InternetService, MonthlyCharges, TenureGroup.
+Prioritaskan program retensi untuk pelanggan month-to-month dengan probabilitas churn tinggi.
+Buat penawaran bundling atau loyalty benefit untuk pelanggan dengan layanan support rendah.
+Evaluasi friction pada pembayaran electronic check karena segmen ini sering menunjukkan churn lebih tinggi.
