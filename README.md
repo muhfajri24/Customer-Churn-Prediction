@@ -1,6 +1,6 @@
 # Customer Churn Prediction
 
-Portfolio project for predicting telecom customers who are likely to churn and turning the model output into retention-focused business insight.
+This project predicts telecom customers who are likely to churn and turns the model output into retention-focused business insight.
 
 ## What This Project Does
 
