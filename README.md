@@ -1,6 +1,6 @@
 # Customer Churn Prediction
 
-This project predicts telecom customers who are likely to churn and turns the model output into retention-focused business insight.
+This project predicts telecom customers who are likely to churn, compares multiple classification models, and turns the results into retention-focused business insight.
 
 ## What This Project Does
 
@@ -11,7 +11,14 @@ This project predicts telecom customers who are likely to churn and turns the mo
 
 ## Why It Matters
 
-This project shows how Python can be used to move from raw customer data to a practical churn prediction workflow that supports retention strategy, risk prioritization, and stakeholder communication.
+This project demonstrates a core supervised learning workflow: preparing structured customer data, training classification models, evaluating performance, and translating predictions into actionable business decisions.
+
+## Data Science Focus
+
+- Supervised learning for binary classification
+- Feature engineering and preprocessing for tabular data
+- Model comparison and evaluation
+- Business interpretation of model output
 
 ## Primary Workflow
 
