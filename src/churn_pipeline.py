@@ -44,6 +44,24 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 
+from src.retention_intelligence import (
+    RISK_METHOD,
+    assign_risk_segments,
+    build_error_analysis,
+    build_global_churn_drivers,
+    build_retention_queue,
+    compare_segmentation_methods,
+    save_driver_figures,
+    save_model_metadata,
+    save_risk_figure,
+    simulate_retention_strategies,
+    summarize_risk_segments,
+    validate_observed_indicators,
+    write_error_summary,
+    write_retention_recommendations,
+    write_simulation_assumptions,
+)
+
 
 # Resolve the project root relative to this file so the pipeline still works
 # even when it is executed from a different working directory.
@@ -56,6 +74,7 @@ REPORT_DIR = PROJECT_ROOT / "reports"
 FIGURE_DIR = REPORT_DIR / "figures"
 POWERBI_DIR = PROJECT_ROOT / "powerbi"
 METRICS_DIR = REPORT_DIR / "metrics"
+INSIGHTS_DIR = REPORT_DIR / "insights"
 
 RANDOM_SEED = 42
 TARGET_COLUMN = "ChurnFlag"
@@ -92,7 +111,7 @@ class TrainedModelResult:
 
 def ensure_directories() -> None:
     """Create the project output folders if they do not already exist."""
-    for folder in [RAW_DIR, PROCESSED_DIR, MODEL_DIR, REPORT_DIR, METRICS_DIR, FIGURE_DIR, POWERBI_DIR]:
+    for folder in [RAW_DIR, PROCESSED_DIR, MODEL_DIR, REPORT_DIR, METRICS_DIR, INSIGHTS_DIR, FIGURE_DIR, POWERBI_DIR]:
         folder.mkdir(parents=True, exist_ok=True)
 
 
@@ -728,12 +747,10 @@ def save_prediction_outputs(
     prediction_df["predicted_churn_flag"] = (
         best_result.y_proba.values >= best_result.threshold
     ).astype(int)
-    prediction_df["churn_probability"] = best_result.y_proba.round(4).values
-    prediction_df["risk_segment"] = pd.cut(
-        prediction_df["churn_probability"],
-        bins=[-0.01, 0.3, 0.6, 1.0],
-        labels=["Low Risk", "Medium Risk", "High Risk"],
-    )
+    prediction_df["churn_probability"] = best_result.y_proba.values
+    prediction_df["risk_segment"] = assign_risk_segments(
+        prediction_df["churn_probability"], best_result.threshold
+    ).values
 
     prediction_df.to_csv(PROCESSED_DIR / "test_predictions_best_model.csv", index=False)
     prediction_df.to_csv(POWERBI_DIR / "customer_churn_scoring.csv", index=False)
@@ -817,9 +834,7 @@ def save_business_recommendations(
         f"The payment method with the highest churn rate is {top_payment.index[0]} ({top_payment.iloc[0]:.2%}).",
         f"The internet service with the highest churn rate is {top_internet.index[0]} ({top_internet.iloc[0]:.2%}).",
         f"The most influential churn drivers in the best model are: {', '.join(top_features)}.",
-        "Prioritize retention programs for month-to-month customers with high predicted churn probability.",
-        "Create bundling offers or loyalty benefits for customers with relatively low support-service adoption.",
-        "Review potential friction in electronic check payments because this segment shows consistently higher churn.",
+        "Rule-matched intervention hypotheses and their evidence are documented in reports/insights/retention_recommendations.md.",
     ]
 
     with open(REPORT_DIR / "business_recommendations.txt", "w", encoding="utf-8") as file:
@@ -880,7 +895,129 @@ def run_project_pipeline() -> None:
         raise AssertionError("Selected threshold is inconsistent with final evaluation.")
     plot_threshold_analysis(selected_model, selected_threshold, threshold_df)
     importance_df = save_feature_importance(best_result, X_test, y_test)
-    save_prediction_outputs(best_result, X_test, y_test, customer_reference)
+    prediction_df = save_prediction_outputs(best_result, X_test, y_test, customer_reference)
+
+    segmentation_comparison = compare_segmentation_methods(prediction_df, selected_threshold)
+    segmentation_comparison.to_csv(INSIGHTS_DIR / "risk_segmentation_comparison.csv", index=False)
+    linked_summary = segmentation_comparison[
+        segmentation_comparison["method"].eq(RISK_METHOD)
+    ].set_index("risk_segment")
+    quantile_summary = segmentation_comparison[
+        segmentation_comparison["method"].eq("probability_quantiles")
+    ].set_index("risk_segment")
+    segmentation_note = (
+        "# Risk Segmentation Method\n\n"
+        "## Approaches compared\n\n"
+        f"- Business-linked: Low < {selected_threshold / 2:.2f}; Medium "
+        f"{selected_threshold / 2:.2f} to < {selected_threshold:.2f}; High >= {selected_threshold:.2f}.\n"
+        "- Probability quantiles: three approximately equal-sized score groups.\n\n"
+        "## Observed holdout quality\n\n"
+        f"Business-linked actual churn rates: Low {linked_summary.loc['Low Risk', 'actual_churn_rate']:.2%}, "
+        f"Medium {linked_summary.loc['Medium Risk', 'actual_churn_rate']:.2%}, "
+        f"High {linked_summary.loc['High Risk', 'actual_churn_rate']:.2%}.\n\n"
+        f"Quantile actual churn rates: Low {quantile_summary.loc['Low Risk', 'actual_churn_rate']:.2%}, "
+        f"Medium {quantile_summary.loc['Medium Risk', 'actual_churn_rate']:.2%}, "
+        f"High {quantile_summary.loc['High Risk', 'actual_churn_rate']:.2%}.\n\n"
+        "## Recommendation\n\n"
+        "Use the business-linked method. Both approaches produce monotonic risk separation, but "
+        "the business-linked boundaries keep High Risk identical to the validated intervention "
+        "population. Quantiles remain a useful portfolio comparison, not the operational rule.\n"
+    )
+    (INSIGHTS_DIR / "risk_segmentation_method.md").write_text(segmentation_note, encoding="utf-8")
+
+    indicator_evidence = validate_observed_indicators(featured_df)
+    indicator_evidence.to_csv(INSIGHTS_DIR / "observed_risk_indicators.csv", index=False)
+    value_reference = {
+        "monthly_charges_p95": round(float(X_train["MonthlyCharges"].quantile(0.95)), 4),
+        "total_charges_p95": round(float(X_train["TotalCharges"].quantile(0.95)), 4),
+    }
+    priority_note = (
+        "# Retention Priority Method\n\n"
+        "The priority score is a transparent decision heuristic, not another trained model.\n\n"
+        "## Formula\n\n"
+        "- 60% churn probability.\n"
+        "- 25% customer-value proxy.\n"
+        "- 15% intervention urgency.\n\n"
+        "The value proxy combines 60% MonthlyCharges and 40% TotalCharges after each is "
+        "scaled to its training-data 95th percentile and capped at 100%. "
+        f"Reference values: MonthlyCharges={value_reference['monthly_charges_p95']:.4f}; "
+        f"TotalCharges={value_reference['total_charges_p95']:.4f}. It is not Customer Lifetime Value.\n\n"
+        "Urgency combines 60% inverse tenure (capped at 72 months) and 40% "
+        "month-to-month contract status.\n\n"
+        "## Priority mapping\n\n"
+        "- Priority 1: High Risk and priority score >= 70.\n"
+        "- Priority 2: other High Risk customers.\n"
+        "- Priority 3: Medium Risk customers.\n"
+        "- Monitor: Low Risk customers.\n\n"
+        "The score-70 boundary is an explainable portfolio rule, not a proven economic optimum. "
+        "It must be revisited when real capacity, customer value, and intervention outcomes exist.\n"
+    )
+    (INSIGHTS_DIR / "retention_priority_method.md").write_text(priority_note, encoding="utf-8")
+    best_result.pipeline.retention_value_reference_ = value_reference
+    retention_queue = build_retention_queue(
+        prediction_df, selected_threshold, indicator_evidence, value_reference
+    )
+    retention_queue.to_csv(INSIGHTS_DIR / "customer_retention_queue.csv", index=False)
+
+    risk_summary = summarize_risk_segments(retention_queue)
+    risk_summary.to_csv(INSIGHTS_DIR / "risk_segment_summary.csv", index=False)
+    risk_summary.to_csv(POWERBI_DIR / "risk_segment_summary.csv", index=False)
+    save_risk_figure(risk_summary, FIGURE_DIR)
+
+    drivers = build_global_churn_drivers(featured_df, importance_df)
+    drivers.to_csv(INSIGHTS_DIR / "global_churn_drivers.csv", index=False)
+    drivers.to_csv(POWERBI_DIR / "churn_driver_summary.csv", index=False)
+    save_driver_figures(drivers, FIGURE_DIR)
+
+    errors = build_error_analysis(retention_queue, selected_threshold)
+    errors.to_csv(INSIGHTS_DIR / "error_analysis.csv", index=False)
+    write_error_summary(errors, INSIGHTS_DIR / "error_analysis_summary.md")
+    write_retention_recommendations(
+        retention_queue,
+        indicator_evidence,
+        INSIGHTS_DIR / "retention_recommendations.md",
+    )
+    action_rules = (
+        retention_queue.groupby(["suggested_action", "risk_segment", "priority_level"], observed=True)
+        .agg(
+            assigned_customer_count=("customerID", "size"),
+            observed_evidence=("primary_reason", lambda values: values.value_counts().index[0]),
+            expected_mechanism=("expected_mechanism", "first"),
+            suggested_success_metric=("suggested_success_metric", "first"),
+        )
+        .reset_index()
+        .sort_values("assigned_customer_count", ascending=False)
+    )
+    action_rules.to_csv(INSIGHTS_DIR / "retention_action_rules.csv", index=False)
+
+    strategy_simulation = simulate_retention_strategies(retention_queue, selected_threshold)
+    strategy_simulation.to_csv(METRICS_DIR / "retention_strategy_simulation.csv", index=False)
+    write_simulation_assumptions(
+        strategy_simulation,
+        METRICS_DIR / "retention_strategy_simulation_assumptions.md",
+    )
+
+    queue_columns = [
+        "customerID", "churn_probability", "predicted_churn_flag", "risk_segment",
+        "retention_priority_score", "priority_level", "customer_value_proxy",
+        "intervention_urgency", "suggested_action", "primary_reason", "secondary_reason",
+        "reason_type", "expected_mechanism", "suggested_success_metric", "Contract",
+        "tenure", "MonthlyCharges", "TotalCharges", "InternetService", "PaymentMethod",
+        "TechSupport", "OnlineSecurity", "SupportServiceCount",
+    ]
+    retention_queue[queue_columns].to_csv(POWERBI_DIR / "customer_retention_queue.csv", index=False)
+    metrics_df.to_csv(POWERBI_DIR / "model_performance_summary.csv", index=False)
+
+    joblib.dump(best_result.pipeline, MODEL_DIR / "best_churn_pipeline.joblib")
+    save_model_metadata(
+        MODEL_DIR / "model_metadata.json",
+        best_result.name,
+        selected_threshold,
+        X_train.columns.tolist(),
+        best_result.metrics,
+        RANDOM_SEED,
+        value_reference,
+    )
     build_powerbi_summary(featured_df)
     save_business_recommendations(metrics_df, importance_df, featured_df)
 

@@ -1,0 +1,4 @@
+risk_segment,customer_count,average_churn_probability,actual_churn_rate,average_tenure,average_monthly_charges,customer_percentage,contract_month_to_month_percentage,contract_one_year_percentage,contract_two_year_percentage
+Low Risk,478,0.0564,0.0314,48.9644,49.1364,0.3392,0.069,0.3285,0.6025
+Medium Risk,223,0.2152,0.1525,37.8027,66.1868,0.1583,0.4709,0.3587,0.1704
+High Risk,708,0.6185,0.459,18.5508,73.5231,0.5025,0.8969,0.089,0.0141

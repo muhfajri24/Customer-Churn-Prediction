@@ -1,0 +1,8 @@
+indicator_code,business_label,customer_count,observed_churn_rate,overall_churn_rate,churn_rate_uplift,validated
+short_tenure,Tenure of 12 months or less,2186,0.4744,0.2654,0.209,True
+electronic_check,Electronic-check payment,2365,0.4529,0.2654,0.1875,True
+month_to_month,Month-to-month contract,3875,0.4271,0.2654,0.1617,True
+fiber_optic,Fiber-optic internet service,3096,0.4189,0.2654,0.1536,True
+no_online_security,No online-security subscription,3498,0.4177,0.2654,0.1523,True
+no_tech_support,No technical-support subscription,3473,0.4164,0.2654,0.151,True
+limited_support_adoption,Limited support-service adoption,4260,0.3289,0.2654,0.0635,True

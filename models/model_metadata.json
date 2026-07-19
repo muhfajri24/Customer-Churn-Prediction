@@ -1,0 +1,63 @@
+{
+  "model_name": "random_forest",
+  "selected_threshold": 0.3,
+  "target_mapping": {
+    "No": 0,
+    "Yes": 1
+  },
+  "feature_columns": [
+    "gender",
+    "SeniorCitizen",
+    "Partner",
+    "Dependents",
+    "tenure",
+    "PhoneService",
+    "MultipleLines",
+    "InternetService",
+    "OnlineSecurity",
+    "OnlineBackup",
+    "DeviceProtection",
+    "TechSupport",
+    "StreamingTV",
+    "StreamingMovies",
+    "Contract",
+    "PaperlessBilling",
+    "PaymentMethod",
+    "MonthlyCharges",
+    "TotalCharges",
+    "TenureGroup",
+    "AvgMonthlySpend",
+    "SupportServiceCount"
+  ],
+  "excluded_columns": [
+    "customerID",
+    "Churn",
+    "ChurnFlag"
+  ],
+  "risk_segmentation_method": "business_threshold_linked",
+  "risk_boundaries": {
+    "low_risk": "probability < 0.15",
+    "medium_risk": "0.15 <= probability < 0.30",
+    "high_risk": "probability >= 0.30"
+  },
+  "priority_score": "60% churn probability + 25% customer value proxy + 15% intervention urgency",
+  "customer_value_proxy_reference": {
+    "monthly_charges_p95": 107.3675,
+    "total_charges_p95": 6979.825
+  },
+  "evaluation_metrics": {
+    "accuracy": 0.6934,
+    "precision": 0.459,
+    "recall": 0.869,
+    "f1_score": 0.6007,
+    "macro_f1": 0.6759,
+    "weighted_f1": 0.7112,
+    "roc_auc": 0.8407,
+    "pr_auc": 0.647,
+    "true_negatives": 652,
+    "false_positives": 383,
+    "false_negatives": 49,
+    "true_positives": 325
+  },
+  "random_seed": 42
+}

@@ -1,0 +1,33 @@
+feature,business_indicator,indicator_type,model_importance,customer_count,observed_churn_rate,overall_churn_rate,association_delta,evidence_basis,decision_relevance
+Contract,Contract: Two year,Retention indicator,0.0459,1695,0.0283,0.2654,-0.2371,Permutation importance plus observed historical association; not causal,0.0109
+Contract,Contract: Month-to-month,Higher churn indicator,0.0459,3875,0.4271,0.2654,0.1617,Permutation importance plus observed historical association; not causal,0.0074
+tenure,Low tenure (<= Q1),Higher churn indicator,0.0159,1854,0.4978,0.2654,0.2325,Permutation importance plus observed historical association; not causal,0.0037
+tenure,High tenure (>= Q3),Retention indicator,0.0159,1819,0.0797,0.2654,-0.1857,Permutation importance plus observed historical association; not causal,0.0029
+InternetService,InternetService: No,Retention indicator,0.0137,1526,0.074,0.2654,-0.1913,Permutation importance plus observed historical association; not causal,0.0026
+InternetService,InternetService: Fiber optic,Higher churn indicator,0.0137,3096,0.4189,0.2654,0.1536,Permutation importance plus observed historical association; not causal,0.0021
+TenureGroup,TenureGroup: 0-12 Months,Higher churn indicator,0.0078,2186,0.4744,0.2654,0.209,Permutation importance plus observed historical association; not causal,0.0016
+TotalCharges,Low TotalCharges (<= Q1),Higher churn indicator,0.0087,1758,0.4346,0.2654,0.1692,Permutation importance plus observed historical association; not causal,0.0015
+TenureGroup,TenureGroup: 49-72 Months,Retention indicator,0.0078,2239,0.0951,0.2654,-0.1702,Permutation importance plus observed historical association; not causal,0.0013
+TotalCharges,High TotalCharges (>= Q3),Retention indicator,0.0087,1758,0.1451,0.2654,-0.1203,Permutation importance plus observed historical association; not causal,0.0011
+TechSupport,TechSupport: No internet service,Retention indicator,0.0045,1526,0.074,0.2654,-0.1913,Permutation importance plus observed historical association; not causal,0.0009
+TechSupport,TechSupport: No,Higher churn indicator,0.0045,3473,0.4164,0.2654,0.151,Permutation importance plus observed historical association; not causal,0.0007
+OnlineSecurity,OnlineSecurity: No internet service,Retention indicator,0.0027,1526,0.074,0.2654,-0.1913,Permutation importance plus observed historical association; not causal,0.0005
+OnlineSecurity,OnlineSecurity: No,Higher churn indicator,0.0027,3498,0.4177,0.2654,0.1523,Permutation importance plus observed historical association; not causal,0.0004
+AvgMonthlySpend,Low AvgMonthlySpend (<= Q1),Retention indicator,0.002,1758,0.1121,0.2654,-0.1533,Permutation importance plus observed historical association; not causal,0.0003
+PaymentMethod,PaymentMethod: Electronic check,Higher churn indicator,0.0011,2365,0.4529,0.2654,0.1875,Permutation importance plus observed historical association; not causal,0.0002
+AvgMonthlySpend,High AvgMonthlySpend (>= Q3),Higher churn indicator,0.002,1758,0.3345,0.2654,0.0691,Permutation importance plus observed historical association; not causal,0.0001
+PaymentMethod,PaymentMethod: Credit card (automatic),Retention indicator,0.0011,1522,0.1524,0.2654,-0.1129,Permutation importance plus observed historical association; not causal,0.0001
+PaperlessBilling,PaperlessBilling: Yes,Higher churn indicator,0.0009,4171,0.3357,0.2654,0.0703,Permutation importance plus observed historical association; not causal,0.0001
+PaperlessBilling,PaperlessBilling: No,Retention indicator,0.0009,2872,0.1633,0.2654,-0.1021,Permutation importance plus observed historical association; not causal,0.0001
+Dependents,Dependents: Yes,Retention indicator,0.0008,2110,0.1545,0.2654,-0.1109,Permutation importance plus observed historical association; not causal,0.0001
+Partner,Partner: Yes,Retention indicator,0.0008,3402,0.1966,0.2654,-0.0687,Permutation importance plus observed historical association; not causal,0.0001
+StreamingMovies,StreamingMovies: No internet service,Retention indicator,0.0003,1526,0.074,0.2654,-0.1913,Permutation importance plus observed historical association; not causal,0.0001
+SeniorCitizen,SeniorCitizen: 1,Higher churn indicator,0.0005,1142,0.4168,0.2654,0.1514,Permutation importance plus observed historical association; not causal,0.0001
+Partner,Partner: No,Higher churn indicator,0.0008,3641,0.3296,0.2654,0.0642,Permutation importance plus observed historical association; not causal,0.0
+Dependents,Dependents: No,Higher churn indicator,0.0008,4933,0.3128,0.2654,0.0474,Permutation importance plus observed historical association; not causal,0.0
+PhoneService,PhoneService: Yes,Higher churn indicator,0.0005,6361,0.2671,0.2654,0.0017,Permutation importance plus observed historical association; not causal,0.0
+SeniorCitizen,SeniorCitizen: 0,Retention indicator,0.0005,5901,0.2361,0.2654,-0.0293,Permutation importance plus observed historical association; not causal,0.0
+PhoneService,PhoneService: No,Retention indicator,0.0005,682,0.2493,0.2654,-0.0161,Permutation importance plus observed historical association; not causal,0.0
+StreamingMovies,StreamingMovies: No,Higher churn indicator,0.0003,2785,0.3368,0.2654,0.0714,Permutation importance plus observed historical association; not causal,0.0
+MultipleLines,MultipleLines: Yes,Higher churn indicator,0.0001,2971,0.2861,0.2654,0.0207,Permutation importance plus observed historical association; not causal,0.0
+MultipleLines,MultipleLines: No phone service,Retention indicator,0.0001,682,0.2493,0.2654,-0.0161,Permutation importance plus observed historical association; not causal,0.0

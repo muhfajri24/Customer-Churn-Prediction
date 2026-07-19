@@ -1,0 +1,6 @@
+strategy,customers_contacted,contact_rate,churners_captured,churners_missed,false_positive_interventions,expected_retained_customers,intervention_cost,expected_remaining_churn_loss,hypothetical_total_cost,hypothetical_net_value_vs_no_intervention,outreach_cost_per_customer,incentive_cost_per_customer,missed_churn_cost_per_customer,intervention_success_rate
+No intervention,0,0.0,0,374,0,0.0,0.0,112200.0,112200.0,0.0,5.0,20.0,300.0,0.25
+Contact all customers,1409,1.0,374,0,1035,93.5,35225.0,84150.0,119375.0,-7175.0,5.0,20.0,300.0,0.25
+Default threshold 0.50,498,0.35,272,102,226,68.0,12450.0,91800.0,104250.0,7950.0,5.0,20.0,300.0,0.25
+Selected threshold 0.30,708,0.5,325,49,383,81.25,17700.0,87825.0,105525.0,6675.0,5.0,20.0,300.0,0.25
+Priority 1 customers only,220,0.16,149,225,71,37.25,5500.0,101025.0,106525.0,5675.0,5.0,20.0,300.0,0.25

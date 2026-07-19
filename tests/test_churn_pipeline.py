@@ -12,6 +12,14 @@ from src.churn_pipeline import (
     prepare_train_test_data,
     validate_required_columns,
 )
+from src.retention_intelligence import (
+    add_observed_indicators,
+    apply_action_rules,
+    assign_risk_segments,
+    calculate_priority_components,
+    score_retention_customers,
+    simulate_retention_strategies,
+)
 
 
 @pytest.fixture
@@ -133,3 +141,105 @@ def test_model_artifact_round_trip(raw_customers, tmp_path):
     joblib.dump(pipeline, artifact)
     loaded = joblib.load(artifact)
     assert loaded.predict_proba(X_test).shape == (len(X_test), 2)
+
+
+def test_business_linked_risk_segmentation():
+    segments = assign_risk_segments([0.00, 0.1499, 0.15, 0.2999, 0.30, 0.90], 0.30)
+    assert segments.astype(str).tolist() == [
+        "Low Risk", "Low Risk", "Medium Risk", "Medium Risk", "High Risk", "High Risk"
+    ]
+
+
+def test_retention_priority_mapping_is_transparent():
+    scored = pd.DataFrame(
+        {
+            "churn_probability": [0.90, 0.40, 0.20, 0.05],
+            "risk_segment": ["High Risk", "High Risk", "Medium Risk", "Low Risk"],
+            "MonthlyCharges": [100, 50, 40, 20],
+            "TotalCharges": [5000, 1000, 500, 100],
+            "tenure": [6, 24, 36, 72],
+            "Contract": ["Month-to-month", "One year", "One year", "Two year"],
+        }
+    )
+    prioritized = calculate_priority_components(scored)
+    assert prioritized["priority_level"].tolist() == [
+        "Priority 1", "Priority 2", "Priority 3", "Monitor"
+    ]
+    assert prioritized["customer_value_proxy"].between(0, 100).all()
+    assert prioritized["intervention_urgency"].between(0, 100).all()
+
+
+def test_readable_indicator_and_action_output():
+    scored = pd.DataFrame(
+        {
+            "Contract": ["Month-to-month"],
+            "tenure": [3],
+            "InternetService": ["Fiber optic"],
+            "PaymentMethod": ["Electronic check"],
+            "TechSupport": ["No"],
+            "OnlineSecurity": ["No"],
+            "SupportServiceCount": [0],
+            "risk_segment": ["High Risk"],
+            "priority_level": ["Priority 1"],
+        }
+    )
+    evidence = pd.DataFrame(
+        {
+            "indicator_code": ["month_to_month", "short_tenure"],
+            "validated": [True, True],
+            "churn_rate_uplift": [0.16, 0.20],
+        }
+    )
+    explained = add_observed_indicators(scored, evidence)
+    acted = apply_action_rules(explained)
+    assert acted.loc[0, "reason_type"] == "Observed risk indicators"
+    assert acted.loc[0, "primary_reason"] == "Tenure of 12 months or less"
+    assert acted.loc[0, "suggested_action"] == "Contract-upgrade incentive"
+    assert isinstance(acted.loc[0, "expected_mechanism"], str)
+
+
+def test_one_customer_inference_and_malformed_handling(raw_customers):
+    featured = add_features(clean_data(raw_customers))
+    X_train, _, y_train, _, numeric, categorical, _ = prepare_train_test_data(featured)
+    pipeline = build_models(build_preprocessor(numeric, categorical))["logistic_regression"]
+    pipeline.fit(X_train, y_train)
+
+    customer = raw_customers.drop(columns="Churn").iloc[[0]].copy()
+    result = score_retention_customers(customer, pipeline, 0.30)
+    required = {
+        "churn_probability", "predicted_churn_flag", "risk_segment", "priority_level",
+        "suggested_action", "primary_reason", "secondary_reason",
+    }
+    assert required.issubset(result.columns)
+    assert result.loc[result.index[0], "churn_probability"] >= 0
+    assert result.loc[result.index[0], "churn_probability"] <= 1
+
+    with pytest.raises(ValueError, match="Missing required inference columns"):
+        score_retention_customers(customer.drop(columns="Contract"), pipeline, 0.30)
+
+
+def test_hypothetical_strategy_simulation_reconciles_counts():
+    queue = pd.DataFrame(
+        {
+            "actual_churn_flag": [1, 1, 0, 0],
+            "churn_probability": [0.80, 0.40, 0.60, 0.10],
+            "priority_level": ["Priority 1", "Priority 2", "Priority 1", "Monitor"],
+        }
+    )
+    assumptions = {
+        "outreach_cost_per_customer": 1.0,
+        "incentive_cost_per_customer": 1.0,
+        "missed_churn_cost_per_customer": 10.0,
+        "intervention_success_rate": 0.50,
+    }
+    result = simulate_retention_strategies(queue, 0.30, assumptions).set_index("strategy")
+    no_action = result.loc["No intervention"]
+    assert no_action["customers_contacted"] == 0
+    assert no_action["churners_missed"] == 2
+    assert no_action["hypothetical_net_value_vs_no_intervention"] == 0
+
+    selected = result.loc["Selected threshold 0.30"]
+    assert selected["customers_contacted"] == 3
+    assert selected["churners_captured"] == 2
+    assert selected["false_positive_interventions"] == 1
+    assert selected["expected_retained_customers"] == 1

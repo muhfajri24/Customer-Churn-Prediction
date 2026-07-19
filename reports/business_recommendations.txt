@@ -3,6 +3,4 @@ The contract type with the highest churn rate is Month-to-month (42.71%).
 The payment method with the highest churn rate is Electronic check (45.29%).
 The internet service with the highest churn rate is Fiber optic (41.89%).
 The most influential churn drivers in the best model are: Contract, tenure, InternetService, TotalCharges, TenureGroup.
-Prioritize retention programs for month-to-month customers with high predicted churn probability.
-Create bundling offers or loyalty benefits for customers with relatively low support-service adoption.
-Review potential friction in electronic check payments because this segment shows consistently higher churn.
+Rule-matched intervention hypotheses and their evidence are documented in reports/insights/retention_recommendations.md.
