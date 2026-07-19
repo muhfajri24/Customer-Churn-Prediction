@@ -20,11 +20,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.inspection import permutation_importance
+from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
+    average_precision_score,
     ConfusionMatrixDisplay,
     accuracy_score,
     classification_report,
@@ -52,6 +55,22 @@ MODEL_DIR = PROJECT_ROOT / "models"
 REPORT_DIR = PROJECT_ROOT / "reports"
 FIGURE_DIR = REPORT_DIR / "figures"
 POWERBI_DIR = PROJECT_ROOT / "powerbi"
+METRICS_DIR = REPORT_DIR / "metrics"
+
+RANDOM_SEED = 42
+TARGET_COLUMN = "ChurnFlag"
+RAW_TARGET_COLUMN = "Churn"
+ID_COLUMN = "customerID"
+EXCLUDED_MODEL_COLUMNS = [ID_COLUMN, RAW_TARGET_COLUMN, TARGET_COLUMN]
+REQUIRED_COLUMNS = [
+    "customerID", "gender", "SeniorCitizen", "Partner", "Dependents",
+    "tenure", "PhoneService", "MultipleLines", "InternetService",
+    "OnlineSecurity", "OnlineBackup", "DeviceProtection", "TechSupport",
+    "StreamingTV", "StreamingMovies", "Contract", "PaperlessBilling",
+    "PaymentMethod", "MonthlyCharges", "TotalCharges", "Churn",
+]
+THRESHOLDS = [0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70]
+MIN_ACCEPTABLE_PRECISION = 0.45
 
 
 @dataclass
@@ -68,12 +87,35 @@ class TrainedModelResult:
     y_pred: pd.Series
     y_proba: pd.Series
     metrics: Dict[str, float]
+    threshold: float = 0.5
 
 
 def ensure_directories() -> None:
     """Create the project output folders if they do not already exist."""
-    for folder in [RAW_DIR, PROCESSED_DIR, MODEL_DIR, FIGURE_DIR, POWERBI_DIR]:
+    for folder in [RAW_DIR, PROCESSED_DIR, MODEL_DIR, REPORT_DIR, METRICS_DIR, FIGURE_DIR, POWERBI_DIR]:
         folder.mkdir(parents=True, exist_ok=True)
+
+
+def validate_required_columns(df: pd.DataFrame) -> None:
+    """Fail early when the input cannot support the churn workflow."""
+    if df.empty:
+        raise ValueError("Dataset is empty.")
+
+    missing_columns = sorted(set(REQUIRED_COLUMNS) - set(df.columns))
+    if missing_columns:
+        raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
+
+    if df[RAW_TARGET_COLUMN].isna().any():
+        raise ValueError("Churn contains missing values.")
+
+    target_values = set(df[RAW_TARGET_COLUMN].astype(str).str.strip().unique())
+    unsupported_targets = sorted(target_values - {"Yes", "No"})
+    if unsupported_targets:
+        raise ValueError(f"Unsupported Churn values: {unsupported_targets}")
+
+    customer_ids = df[ID_COLUMN].astype("string").str.strip()
+    if customer_ids.isna().any() or customer_ids.eq("").any():
+        raise ValueError("customerID contains missing or empty values.")
 
 
 def download_dataset() -> Path:
@@ -125,6 +167,7 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     - drop duplicates,
     - handle missing values.
     """
+    validate_required_columns(df)
     cleaned = df.copy()
 
     # `TotalCharges` is often read as an object column because blank strings
@@ -140,6 +183,12 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
 
     # Remove duplicates if they exist.
     cleaned = cleaned.drop_duplicates()
+
+    if cleaned[ID_COLUMN].duplicated().any():
+        raise ValueError("customerID must be unique after duplicate-row removal.")
+
+    if cleaned["TotalCharges"].notna().sum() == 0:
+        raise ValueError("TotalCharges contains no valid numeric values.")
 
     # Keep customer IDs in the main table for traceability. They are excluded
     # from model features later in the pipeline.
@@ -196,16 +245,22 @@ def prepare_train_test_data(
     real customers for dashboards and business recommendations.
     """
     feature_df = df.copy()
-    customer_reference = feature_df[["customerID", "Churn"]].copy()
+    customer_reference = feature_df[[ID_COLUMN, RAW_TARGET_COLUMN]].copy()
 
-    y = feature_df["ChurnFlag"]
-    X = feature_df.drop(columns=["Churn", "ChurnFlag"])
+    y = feature_df[TARGET_COLUMN]
+    X = feature_df.drop(columns=EXCLUDED_MODEL_COLUMNS)
+
+    if X.empty or X.shape[1] == 0:
+        raise ValueError("Model feature matrix is empty.")
+    leaked_columns = set(EXCLUDED_MODEL_COLUMNS).intersection(X.columns)
+    if leaked_columns:
+        raise AssertionError(f"Excluded columns reached model features: {sorted(leaked_columns)}")
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
         test_size=0.2,
-        random_state=42,
+        random_state=RANDOM_SEED,
         stratify=y,
     )
 
@@ -260,29 +315,47 @@ def build_models(preprocessor: ColumnTransformer) -> Dict[str, Pipeline]:
     consistent across experiments.
     """
     return {
+        "dummy_classifier": Pipeline(
+            steps=[
+                ("preprocessor", clone(preprocessor)),
+                ("model", DummyClassifier(strategy="prior", random_state=RANDOM_SEED)),
+            ]
+        ),
         "logistic_regression": Pipeline(
             steps=[
-                ("preprocessor", preprocessor),
+                ("preprocessor", clone(preprocessor)),
+                (
+                    "model",
+                    LogisticRegression(
+                        max_iter=2000,
+                        random_state=RANDOM_SEED,
+                    ),
+                ),
+            ]
+        ),
+        "balanced_logistic_regression": Pipeline(
+            steps=[
+                ("preprocessor", clone(preprocessor)),
                 (
                     "model",
                     LogisticRegression(
                         max_iter=2000,
                         class_weight="balanced",
-                        random_state=42,
+                        random_state=RANDOM_SEED,
                     ),
                 ),
             ]
         ),
         "random_forest": Pipeline(
             steps=[
-                ("preprocessor", preprocessor),
+                ("preprocessor", clone(preprocessor)),
                 (
                     "model",
                     RandomForestClassifier(
                         n_estimators=300,
                         max_depth=10,
                         min_samples_leaf=2,
-                        random_state=42,
+                        random_state=RANDOM_SEED,
                         class_weight="balanced",
                         n_jobs=-1,
                     ),
@@ -291,7 +364,7 @@ def build_models(preprocessor: ColumnTransformer) -> Dict[str, Pipeline]:
         ),
         "xgboost": Pipeline(
             steps=[
-                ("preprocessor", preprocessor),
+                ("preprocessor", clone(preprocessor)),
                 (
                     "model",
                     XGBClassifier(
@@ -302,7 +375,7 @@ def build_models(preprocessor: ColumnTransformer) -> Dict[str, Pipeline]:
                         colsample_bytree=0.9,
                         objective="binary:logistic",
                         eval_metric="logloss",
-                        random_state=42,
+                        random_state=RANDOM_SEED,
                     ),
                 ),
             ]
@@ -310,7 +383,34 @@ def build_models(preprocessor: ColumnTransformer) -> Dict[str, Pipeline]:
     }
 
 
-def evaluate_model(name: str, pipeline: Pipeline, X_test: pd.DataFrame, y_test: pd.Series) -> TrainedModelResult:
+def metrics_at_threshold(y_true: pd.Series, y_proba: pd.Series, threshold: float) -> Tuple[pd.Series, Dict[str, float]]:
+    """Calculate decision metrics using an explicit churn threshold."""
+    y_pred = pd.Series((y_proba >= threshold).astype(int), index=y_true.index, name="prediction")
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+    metrics = {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "precision": precision_score(y_true, y_pred, zero_division=0),
+        "recall": recall_score(y_true, y_pred, zero_division=0),
+        "f1_score": f1_score(y_true, y_pred, zero_division=0),
+        "macro_f1": f1_score(y_true, y_pred, average="macro", zero_division=0),
+        "weighted_f1": f1_score(y_true, y_pred, average="weighted", zero_division=0),
+        "roc_auc": roc_auc_score(y_true, y_proba),
+        "pr_auc": average_precision_score(y_true, y_proba),
+        "true_negatives": int(tn),
+        "false_positives": int(fp),
+        "false_negatives": int(fn),
+        "true_positives": int(tp),
+    }
+    return y_pred, metrics
+
+
+def evaluate_model(
+    name: str,
+    pipeline: Pipeline,
+    X_test: pd.DataFrame,
+    y_test: pd.Series,
+    threshold: float = 0.5,
+) -> TrainedModelResult:
     """
     Generate predictions and evaluation metrics for one model.
 
@@ -321,15 +421,11 @@ def evaluate_model(name: str, pipeline: Pipeline, X_test: pd.DataFrame, y_test: 
     - F1-score
     - ROC-AUC
     """
-    y_pred = pd.Series(pipeline.predict(X_test), index=y_test.index, name="prediction")
     y_proba = pd.Series(pipeline.predict_proba(X_test)[:, 1], index=y_test.index, name="churn_probability")
-
+    y_pred, raw_metrics = metrics_at_threshold(y_test, y_proba, threshold)
     metrics = {
-        "accuracy": round(accuracy_score(y_test, y_pred), 4),
-        "precision": round(precision_score(y_test, y_pred), 4),
-        "recall": round(recall_score(y_test, y_pred), 4),
-        "f1_score": round(f1_score(y_test, y_pred), 4),
-        "roc_auc": round(roc_auc_score(y_test, y_proba), 4),
+        key: round(value, 4) if isinstance(value, float) else value
+        for key, value in raw_metrics.items()
     }
 
     return TrainedModelResult(
@@ -338,6 +434,7 @@ def evaluate_model(name: str, pipeline: Pipeline, X_test: pd.DataFrame, y_test: 
         y_pred=y_pred,
         y_proba=y_proba,
         metrics=metrics,
+        threshold=threshold,
     )
 
 
@@ -359,14 +456,164 @@ def train_and_evaluate_models(
     return results
 
 
-def save_metrics(results: List[TrainedModelResult]) -> pd.DataFrame:
+def build_threshold_analysis(
+    model_name: str,
+    y_true: pd.Series,
+    y_proba: pd.Series,
+) -> pd.DataFrame:
+    """Evaluate candidate operating thresholds on validation predictions."""
+    rows = []
+    for threshold in THRESHOLDS:
+        y_pred, metrics = metrics_at_threshold(y_true, y_proba, threshold)
+        customers_flagged = int(y_pred.sum())
+        flagged_percentage = customers_flagged / len(y_true)
+        selection_score = (
+            0.30 * metrics["recall"]
+            + 0.30 * metrics["f1_score"]
+            + 0.25 * metrics["pr_auc"]
+            + 0.15 * metrics["precision"]
+        )
+        rows.append(
+            {
+                "model": model_name,
+                "threshold": threshold,
+                "precision": metrics["precision"],
+                "recall": metrics["recall"],
+                "f1_score": metrics["f1_score"],
+                "pr_auc": metrics["pr_auc"],
+                "false_positives": metrics["false_positives"],
+                "false_negatives": metrics["false_negatives"],
+                "customers_flagged": customers_flagged,
+                "flagged_percentage": flagged_percentage,
+                "selection_score": selection_score,
+                "selection_eligible": (
+                    metrics["precision"] >= MIN_ACCEPTABLE_PRECISION
+                    and flagged_percentage <= 0.50
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def select_model_and_threshold(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    preprocessor: ColumnTransformer,
+) -> Tuple[str, float, pd.DataFrame]:
+    """Select model and threshold using a validation subset of training data.
+
+    The documented score prioritizes churn recall and churn F1, followed by
+    PR-AUC and precision. Eligible candidates must reach 45% precision and
+    flag at most 50% of validation customers.
+    """
+    X_subtrain, X_validation, y_subtrain, y_validation = train_test_split(
+        X_train,
+        y_train,
+        test_size=0.25,
+        random_state=RANDOM_SEED,
+        stratify=y_train,
+    )
+
+    analyses = []
+    for model_name, pipeline in build_models(preprocessor).items():
+        pipeline.fit(X_subtrain, y_subtrain)
+        probabilities = pd.Series(
+            pipeline.predict_proba(X_validation)[:, 1],
+            index=y_validation.index,
+        )
+        analyses.append(build_threshold_analysis(model_name, y_validation, probabilities))
+
+    threshold_df = pd.concat(analyses, ignore_index=True)
+    eligible = threshold_df[threshold_df["selection_eligible"]]
+    candidates = eligible if not eligible.empty else threshold_df
+    selected_row = candidates.sort_values(
+        ["selection_score", "recall", "false_negatives", "precision"],
+        ascending=[False, False, True, False],
+    ).iloc[0]
+    threshold_df["selected"] = (
+        threshold_df["model"].eq(selected_row["model"])
+        & threshold_df["threshold"].eq(selected_row["threshold"])
+    )
+    threshold_df = threshold_df.round(4)
+    threshold_df.to_csv(METRICS_DIR / "threshold_analysis.csv", index=False)
+    return str(selected_row["model"]), float(selected_row["threshold"]), threshold_df
+
+
+def train_final_models(
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    y_train: pd.Series,
+    y_test: pd.Series,
+    preprocessor: ColumnTransformer,
+    threshold_df: pd.DataFrame,
+) -> List[TrainedModelResult]:
+    """Refit every model on all training rows and evaluate on test once."""
+    results = []
+    for model_name, pipeline in build_models(preprocessor).items():
+        model_rows = threshold_df[
+            (threshold_df["model"] == model_name)
+            & threshold_df["selection_eligible"]
+        ]
+        if model_rows.empty:
+            model_rows = threshold_df[threshold_df["model"] == model_name]
+        threshold = float(
+            model_rows.sort_values("selection_score", ascending=False).iloc[0]["threshold"]
+        )
+        pipeline.fit(X_train, y_train)
+        results.append(evaluate_model(model_name, pipeline, X_test, y_test, threshold))
+    return results
+
+
+def save_metrics(
+    results: List[TrainedModelResult],
+    selected_model: str | None = None,
+) -> pd.DataFrame:
     """Save the cross-model metrics summary to CSV."""
     metrics_df = pd.DataFrame(
-        [{"model": result.name, **result.metrics} for result in results]
-    ).sort_values(by="roc_auc", ascending=False)
+        [
+            {
+                "model": result.name,
+                "decision_threshold": result.threshold,
+                "selected_model": result.name == selected_model,
+                **result.metrics,
+            }
+            for result in results
+        ]
+    ).sort_values(by=["selected_model", "pr_auc"], ascending=[False, False])
 
+    metrics_df.to_csv(METRICS_DIR / "model_comparison.csv", index=False)
     metrics_df.to_csv(REPORT_DIR / "metrics_summary.csv", index=False)
     return metrics_df
+
+
+def plot_threshold_analysis(selected_model: str, selected_threshold: float, threshold_df: pd.DataFrame) -> None:
+    """Plot validation operating points for the selected model."""
+    selected_rows = threshold_df[threshold_df["model"] == selected_model]
+
+    plt.figure(figsize=(8, 6))
+    for metric in ["precision", "recall", "f1_score"]:
+        plt.plot(selected_rows["threshold"], selected_rows[metric], marker="o", label=metric)
+    plt.axvline(selected_threshold, color="black", linestyle="--", label="selected threshold")
+    plt.xlabel("Decision Threshold")
+    plt.ylabel("Score")
+    plt.title(f"Threshold Trade-off - {selected_model}")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(FIGURE_DIR / "threshold_tradeoff.png", dpi=200)
+    plt.close()
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(selected_rows["recall"], selected_rows["precision"], marker="o")
+    chosen = selected_rows[selected_rows["selected"]]
+    if not chosen.empty:
+        plt.scatter(chosen["recall"], chosen["precision"], color="red", s=80, label="selected threshold")
+        plt.legend()
+    plt.xlabel("Churn Recall")
+    plt.ylabel("Churn Precision")
+    plt.title(f"Precision-Recall Operating Points - {selected_model}")
+    plt.tight_layout()
+    plt.savefig(FIGURE_DIR / "precision_recall_curve.png", dpi=200)
+    plt.close()
 
 
 def plot_class_distribution(df: pd.DataFrame) -> None:
@@ -464,6 +711,7 @@ def save_prediction_outputs(
     best_result: TrainedModelResult,
     X_test: pd.DataFrame,
     y_test: pd.Series,
+    customer_reference: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """
     Save predictions from the best-performing model.
@@ -474,8 +722,12 @@ def save_prediction_outputs(
     - Power BI import
     """
     prediction_df = X_test.copy()
+    if customer_reference is not None:
+        prediction_df.insert(0, ID_COLUMN, customer_reference.loc[X_test.index, ID_COLUMN])
     prediction_df["actual_churn_flag"] = y_test.values
-    prediction_df["predicted_churn_flag"] = best_result.y_pred.values
+    prediction_df["predicted_churn_flag"] = (
+        best_result.y_proba.values >= best_result.threshold
+    ).astype(int)
     prediction_df["churn_probability"] = best_result.y_proba.round(4).values
     prediction_df["risk_segment"] = pd.cut(
         prediction_df["churn_probability"],
@@ -536,7 +788,7 @@ def build_powerbi_summary(df: pd.DataFrame) -> None:
 def save_classification_reports(results: List[TrainedModelResult], y_test: pd.Series) -> None:
     """Save each model's classification report as reusable JSON."""
     for result in results:
-        report = classification_report(y_test, result.y_pred, output_dict=True)
+        report = classification_report(y_test, result.y_pred, output_dict=True, zero_division=0)
         with open(REPORT_DIR / f"classification_report_{result.name}.json", "w", encoding="utf-8") as file:
             json.dump(report, file, indent=2)
 
@@ -560,7 +812,7 @@ def save_business_recommendations(
     top_features = importance_df.head(5)["feature"].tolist()
 
     recommendations = [
-        f"The best model by ROC-AUC is {best_model_name}.",
+        f"The selected model for the retention decision objective is {best_model_name}.",
         f"The contract type with the highest churn rate is {top_contract.index[0]} ({top_contract.iloc[0]:.2%}).",
         f"The payment method with the highest churn rate is {top_payment.index[0]} ({top_payment.iloc[0]:.2%}).",
         f"The internet service with the highest churn rate is {top_internet.index[0]} ({top_internet.iloc[0]:.2%}).",
@@ -589,23 +841,51 @@ def run_project_pipeline() -> None:
     save_cleaned_dataset(featured_df)
     plot_class_distribution(featured_df)
 
-    X_train, X_test, y_train, y_test, numeric_features, categorical_features, _ = prepare_train_test_data(featured_df)
+    X_train, X_test, y_train, y_test, numeric_features, categorical_features, customer_reference = prepare_train_test_data(featured_df)
     preprocessor = build_preprocessor(numeric_features, categorical_features)
 
-    results = train_and_evaluate_models(X_train, X_test, y_train, y_test, preprocessor)
-    metrics_df = save_metrics(results)
+    selected_model, selected_threshold, threshold_df = select_model_and_threshold(
+        X_train, y_train, preprocessor
+    )
+    selected_validation = threshold_df[threshold_df["selected"]].iloc[0]
+    threshold_note = (
+        "# Threshold Selection\n\n"
+        "Decision objective: identify a high proportion of actual churners while "
+        "keeping retention outreach operationally manageable.\n\n"
+        "Selection data: a stratified validation subset drawn only from the training set. "
+        "The held-out test set was not used for model or threshold selection.\n\n"
+        "Candidate thresholds: 0.25 to 0.70 in increments of 0.05. Candidates must "
+        f"reach precision >= {MIN_ACCEPTABLE_PRECISION:.2f} and flag <= 50% of validation customers.\n\n"
+        "Selection score: 30% churn recall + 30% churn F1 + 25% PR-AUC + 15% churn precision.\n\n"
+        f"Selected model: {selected_model}\n\n"
+        f"Selected threshold: {selected_threshold:.2f}\n\n"
+        f"Validation precision: {selected_validation['precision']:.4f}\n\n"
+        f"Validation recall: {selected_validation['recall']:.4f}\n\n"
+        f"Validation churn F1: {selected_validation['f1_score']:.4f}\n\n"
+        f"Validation customers flagged: {int(selected_validation['customers_flagged'])} "
+        f"({selected_validation['flagged_percentage']:.2%})\n"
+    )
+    (METRICS_DIR / "threshold_selection.md").write_text(threshold_note, encoding="utf-8")
+    results = train_final_models(
+        X_train, X_test, y_train, y_test, preprocessor, threshold_df
+    )
+    metrics_df = save_metrics(results, selected_model)
     save_model_artifacts(results)
     save_classification_reports(results, y_test)
     plot_roc_curves(results, y_test)
     plot_confusion_matrices(results, y_test)
 
-    best_result = sorted(results, key=lambda item: item.metrics["roc_auc"], reverse=True)[0]
+    best_result = next(result for result in results if result.name == selected_model)
+    if best_result.threshold != selected_threshold:
+        raise AssertionError("Selected threshold is inconsistent with final evaluation.")
+    plot_threshold_analysis(selected_model, selected_threshold, threshold_df)
     importance_df = save_feature_importance(best_result, X_test, y_test)
-    save_prediction_outputs(best_result, X_test, y_test)
+    save_prediction_outputs(best_result, X_test, y_test, customer_reference)
     build_powerbi_summary(featured_df)
     save_business_recommendations(metrics_df, importance_df, featured_df)
 
     print("Project pipeline completed successfully.")
-    print(f"Best model: {best_result.name}")
+    print(f"Selected model: {best_result.name}")
+    print(f"Selected threshold: {best_result.threshold:.2f}")
     print("Metrics summary:")
     print(metrics_df.to_string(index=False))

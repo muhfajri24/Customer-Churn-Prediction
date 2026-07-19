@@ -47,6 +47,8 @@ from src.churn_pipeline import (  # noqa: E402
     save_metrics,
     save_model_artifacts,
     save_prediction_outputs,
+    select_model_and_threshold,
+    train_final_models,
 )
 
 
@@ -290,7 +292,7 @@ plt.show()
 
 # %%
 show_section("14. Train-Test Split", "Split the dataset and display the resulting shapes.")
-X_train, X_test, y_train, y_test, numeric_features, categorical_features, _ = prepare_train_test_data(featured_df)
+X_train, X_test, y_train, y_test, numeric_features, categorical_features, customer_reference = prepare_train_test_data(featured_df)
 
 split_summary = pd.DataFrame(
     {
@@ -322,15 +324,17 @@ summarize_preprocessor(preprocessor, X_train)
 
 
 # %%
-show_section("16. Model Setup", "This project trains three classification models.")
+show_section("16. Model Setup", "Compare a baseline and four classification models.")
 models = build_models(preprocessor)
 model_summary = pd.DataFrame(
     {
         "model_name": list(models.keys()),
         "description": [
-            "Baseline linear model that is easy to interpret",
-            "Ensemble model built from multiple decision trees",
-            "Boosting model that performs strongly on tabular data",
+            "No-skill baseline using the training class prior",
+            "Unweighted linear model",
+            "Class-balanced linear model",
+            "Class-balanced tree ensemble",
+            "Gradient-boosted tree model",
         ],
     }
 )
@@ -339,25 +343,26 @@ display(model_summary)
 
 # %%
 show_section("17. Model Training", "Train each model and display its immediate evaluation metrics.")
-results = []
-
-for model_name, model_pipeline in models.items():
-    print(f"Training model: {model_name}")
-    model_pipeline.fit(X_train, y_train)
-    result = evaluate_model(model_name, model_pipeline, X_test, y_test)
-    results.append(result)
-    display(pd.DataFrame([result.metrics], index=[model_name]))
+selected_model, selected_threshold, threshold_df = select_model_and_threshold(X_train, y_train, preprocessor)
+results = train_final_models(X_train, X_test, y_train, y_test, preprocessor, threshold_df)
+for result in results:
+    display(pd.DataFrame([result.metrics], index=[result.name]))
 
 
 # %%
 show_section("18. Metrics Summary", "Compare accuracy, precision, recall, F1-score, and ROC-AUC.")
-metrics_df = save_metrics(results)
+metrics_df = save_metrics(results, selected_model)
 display(metrics_df)
 
 
 # %%
 show_section("19. Model Comparison Chart", "Use a grouped bar chart to compare model performance across all metrics.")
-metrics_long = metrics_df.melt(id_vars="model", var_name="metric", value_name="score")
+metrics_long = metrics_df.melt(
+    id_vars="model",
+    value_vars=["precision", "recall", "f1_score", "roc_auc", "pr_auc"],
+    var_name="metric",
+    value_name="score",
+)
 plt.figure(figsize=(11, 6))
 sns.barplot(data=metrics_long, x="metric", y="score", hue="model", palette="viridis")
 plt.title("Model Metrics Comparison")
@@ -396,16 +401,17 @@ for result in results:
 
 
 # %%
-show_section("22. Best Model Selection", "The current best model is selected using the highest ROC-AUC.")
-best_result = sorted(results, key=lambda item: item.metrics["roc_auc"], reverse=True)[0]
-print("Best model based on ROC-AUC:", best_result.name)
+show_section("22. Model and Threshold Selection", "Selection uses training-validation evidence and a retention-oriented score.")
+best_result = next(result for result in results if result.name == selected_model)
+print("Selected model:", best_result.name)
+print("Selected threshold:", best_result.threshold)
 display(pd.DataFrame([best_result.metrics], index=[best_result.name]))
 
 
 # %%
 show_section("23. Prediction and Scoring", "Save the trained models and preview customer scoring results.")
 save_model_artifacts(results)
-prediction_df = save_prediction_outputs(best_result, X_test, y_test)
+prediction_df = save_prediction_outputs(best_result, X_test, y_test, customer_reference)
 display(prediction_df.head(10))
 
 
@@ -495,5 +501,5 @@ print(recommendation_file.read_text(encoding="utf-8"))
 # %%
 show_section("30. Final Summary", "Close the walkthrough by showing the final model comparison.")
 print("Analysis completed.")
-print("Best model based on ROC-AUC:", best_result.name)
+print("Selected model:", best_result.name)
 display(metrics_df)
